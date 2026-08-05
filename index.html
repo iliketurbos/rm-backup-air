@@ -1,1 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Backup Manager - Auto backup your photos and videos from removable devices">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Backup Manager">
+    
+    <link rel="manifest" href="manifest.json">
 
+    <link rel="stylesheet" href="styles.css">
+    <title>Backup Manager</title>
+</head>
+<body>
+    <div id="app" class="app">
+        <!-- Loading Screen -->
+        <div id="loadingScreen" class="screen loading-screen">
+            <div class="spinner"></div>
+            <p>Initializing Backup Manager...</p>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="dashboard" class="screen dashboard-screen" style="display: none;">
+            <header class="app-header">
+                <div class="header-content">
+                    <h1>📱 Backup Manager</h1>
+                    <div class="header-status">
+                        <span id="statusIndicator" class="status-indicator waiting">●</span>
+                        <span id="statusText" class="status-text">Waiting for devices...</span>
+                    </div>
+                </div>
+                <button id="settingsBtn" class="btn-icon" title="Settings">⚙️</button>
+            </header>
+            <div id="noticeBanner" class="notice-banner hidden"></div>
+            <main class="main-content">
+                <!-- Active Device Card -->
+                <div id="deviceCard" class="device-card hidden">
+                    <div class="device-header">
+                        <div class="device-info">
+                            <div class="device-icon">💾</div>
+                            <div>
+                                <h2 id="deviceName">Device Name</h2>
+                                <p id="devicePath" class="device-path">Path to device</p>
+                            </div>
+                        </div>
+                        <button id="deviceMenuBtn" class="btn-icon" title="Device options">⋮</button>
+                    </div>
+
+                    <div class="device-progress-section hidden" id="progressSection">
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <p class="progress-text">
+                            <span id="progressCount">0</span> files processed
+                        </p>
+                    </div>
+
+                    <div class="device-actions">
+                        <div class="action-status" id="deviceStatus">
+                            <span class="status-bullet">●</span>
+                            <span id="deviceStatusText">Ready to backup</span>
+                        </div>
+                        <button id="backupBtn" class="btn btn-primary">Start Backup</button>
+                    </div>
+                </div>
+
+                <!-- Backup History -->
+                <section class="history-section">
+                    <h2>📋 Backup History</h2>
+                    <div id="historyList" class="history-list">
+                        <p class="empty-state">No backups yet. Connect a device to get started!</p>
+                    </div>
+                </section>
+
+                <!-- Backed Up Devices -->
+                <section class="devices-section">
+                    <h2>✅ Registered Devices</h2>
+                    <div id="devicesList" class="devices-list">
+                        <p class="empty-state">No devices registered yet.</p>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- Device Detection Dialog -->
+        <div id="deviceDialogOverlay" class="dialog-overlay hidden">
+            <div class="dialog">
+                <div class="dialog-header">
+                    <h2>New Device Detected! 🎉</h2>
+                </div>
+                <div class="dialog-content">
+                    <p id="deviceDialogName" class="device-name-large">Unknown Device</p>
+                    <p class="dialog-question">Would you like to add this to your auto-backup list?</p>
+                    <div class="dialog-info">
+                        <p>This device will be backed up automatically whenever connected.</p>
+                        <p class="hint-text">You can change this later in settings.</p>
+                    </div>
+                </div>
+                <div class="dialog-actions">
+                    <button id="deviceDeclineBtn" class="btn btn-secondary">Not Now</button>
+                    <button id="deviceAcceptBtn" class="btn btn-primary">Yes, Add it</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backup Folder Dialog -->
+        <div id="folderDialogOverlay" class="dialog-overlay hidden">
+            <div class="dialog">
+                <div class="dialog-header">
+                    <h2>Set Up Backup Location 📁</h2>
+                </div>
+                <div class="dialog-content">
+                    <p>Choose where to save backups from <span id="folderDeviceName">this device</span>:</p>
+                    
+                    <div class="folder-options">
+                        <div class="option-card selected" data-option="dcim">
+                            <div class="option-icon">📷</div>
+                            <h3>DCIM (Photos & Videos)</h3>
+                            <p>Photos and videos from camera apps</p>
+                        </div>
+                        <div class="option-card" data-option="custom">
+                            <div class="option-icon">📁</div>
+                            <h3>Custom Folder</h3>
+                            <p>Create or choose any folder</p>
+                        </div>
+                    </div>
+
+                    <div id="customFolderInput" class="custom-folder-input" style="display: none;">
+                        <label for="folderName">Folder Name:</label>
+                        <input type="text" id="folderName" placeholder="e.g., My Phone Backup" maxlength="50">
+                        <p class="input-hint">This folder will be created in your backup location</p>
+                    </div>
+                </div>
+                <div class="dialog-actions">
+                    <button id="folderCancelBtn" class="btn btn-secondary">Cancel</button>
+                    <button id="folderCreateBtn" class="btn btn-primary">Continue</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settingsOverlay" class="dialog-overlay hidden">
+            <div class="dialog full-screen-dialog">
+                <div class="dialog-header">
+                    <h2>Settings</h2>
+                    <button id="settingsCloseBtn" class="btn-icon" title="Close">✕</button>
+                </div>
+                <div class="dialog-content">
+                    <section class="settings-section">
+                        <h3>🔧 Backup Settings</h3>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <label>Backup Location</label>
+                                <p class="setting-hint">Choose where to save your backups</p>
+                            </div>
+                            <button id="selectBackupLocationBtn" class="btn btn-secondary">Select Folder</button>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <label>Auto-Backup on Connect</label>
+                                <p class="setting-hint">Automatically start backup when device connects</p>
+                            </div>
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="autoBackupToggle" checked>
+                                <label for="autoBackupToggle" class="toggle-label"></label>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="settings-section">
+                        <h3>📊 Statistics</h3>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-number" id="totalFiles">0</div>
+                                <div class="stat-label">Files Backed Up</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number" id="totalSize">0 MB</div>
+                                <div class="stat-label">Total Size</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number" id="totalDevices">0</div>
+                                <div class="stat-label">Devices</div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="settings-section">
+                        <h3>🗑️ Manage Devices</h3>
+                        <div id="settingsDevicesList" class="devices-list">
+                            <p class="empty-state">No devices registered yet.</p>
+                        </div>
+                    </section>
+
+                    <section class="settings-section">
+                        <h3>ℹ️ About</h3>
+                        <div class="about-info">
+                            <p><strong>Backup Manager v1.0</strong></p>
+                            <p>Choose a backup location and manage devices from settings.</p>
+                            <p class="about-features">
+                                • Keeps files safe<br>
+                                • No automatic deletion<br>
+                                • Works on desktop and mobile
+                            </p>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifications -->
+        <div id="notificationContainer" class="notification-container"></div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js')
+                .catch(err => console.log('Service Worker registration failed:', err));
+        }
+    </script>
+</body>
+</html>
