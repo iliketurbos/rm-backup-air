@@ -1,0 +1,27 @@
+==============================================
+  APK/XAPK Analysis - CODECS.COM
+==============================================
+
+Date: 8/6/2026, 4:03:48 PM
+File: rmba-v1.0-release.apk
+
+Package: com.iliketurbos.rmba
+Version: 1.0 (code 10000)
+Min Android: Android 7.0 (API 24)
+Target: API 36 (API 36)
+
+Google Play required: No - no Play licence check found
+
+Permissions (9):
+  INTERNET [OK]
+  ACCESS_NETWORK_STATE [OK]
+  POST_NOTIFICATIONS [OK]
+  READ_EXTERNAL_STORAGE [CA]
+  WRITE_EXTERNAL_STORAGE [CA]
+  DOWNLOAD_WITHOUT_NOTIFICATION [OK]
+  ACCESS_DOWNLOAD_MANAGER [OK]
+  BLUETOOTH [OK]
+  DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION [OK]
+
+Signature: v2/v3
+
