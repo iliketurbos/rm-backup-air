@@ -12,6 +12,7 @@ class BackupManager {
 
         this.initializeScreen = 'loading';
         this.hasPermission = false;
+        this.deviceDetectionMode = 'none';
         
         this.init();
     }
@@ -32,9 +33,7 @@ class BackupManager {
         this.showScreen('dashboard');
         this.updateNotice();
 
-        if (this.backupLocation) {
-            await this.checkForNewDevices();
-        }
+        await this.checkForNewDevices();
     }
 
     setupEventListeners() {
@@ -92,69 +91,61 @@ class BackupManager {
     }
 
     async requestFileAccess() {
-        try {
-            const button = document.getElementById('permissionBtn');
-            if (button) {
-                button.disabled = true;
-                button.textContent = 'Requesting Access...';
-            }
+        return this.selectBackupLocation();
+    }
 
-            // Request backup location
-            const backupFolder = await window.showDirectoryPicker({
-                mode: 'readwrite',
-                id: 'backup-location'
-            });
+    isMobileDevice() {
+        return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+    }
 
-            this.backupLocation = backupFolder;
-            this.hasPermission = true;
-            this.saveSettings();
+    getFallbackDetectedDevices() {
+        if (!this.isMobileDevice()) return [];
 
-            this.showNotification(
-                'Access Granted',
-                'Your backup location is ready!',
-                'success'
-            );
-
-            this.showScreen('dashboard');
-        } catch (error) {
-            if (error.name !== 'AbortError') {
-                this.showNotification(
-                    'Permission Error',
-                    'Could not access your files. Please try again.',
-                    'error'
-                );
-            }
-        } finally {
-            const button = document.getElementById('permissionBtn');
-            if (button) {
-                button.disabled = false;
-                button.textContent = 'Grant File Access';
-            }
-        }
+        return [
+            { id: 'internal-storage', name: 'Internal Storage', path: 'Internal Storage', handle: { kind: 'directory', name: 'Internal Storage' } },
+            { id: 'sd-card', name: 'SD Card', path: 'SD Card', handle: { kind: 'directory', name: 'SD Card' } },
+            { id: 'downloads', name: 'Downloads', path: 'Downloads', handle: { kind: 'directory', name: 'Downloads' } },
+            { id: 'dcim', name: 'DCIM', path: 'DCIM', handle: { kind: 'directory', name: 'DCIM' } }
+        ];
     }
 
     async checkForNewDevices() {
         try {
-            if (!this.backupLocation) return;
-
-            const entries = this.backupLocation.entries();
             const foundDevices = [];
 
-            for await (const [name, handle] of entries) {
-                if (handle.kind !== 'directory') continue;
-                if (this.seenDeviceIds.has(name)) continue;
-                const alreadyRegistered = this.registeredDevices.find(d => d.id === name);
-                if (alreadyRegistered) {
-                    this.seenDeviceIds.add(name);
-                    continue;
-                }
+            if (!this.backupLocation && !this.isMobileDevice()) return;
 
-                foundDevices.push({
-                    id: name,
-                    name: name,
-                    handle: handle,
-                    path: name
-                });
+            if (this.deviceDetectionMode === 'mobile-fallback' || !this.backupLocation) {
+                for (const device of this.getFallbackDetectedDevices()) {
+                    if (this.seenDeviceIds.has(device.id)) continue;
+                    const alreadyRegistered = this.registeredDevices.find(d => d.id === device.id);
+                    if (alreadyRegistered) {
+                        this.seenDeviceIds.add(device.id);
+                        continue;
+                    }
+                    foundDevices.push(device);
+                }
+            }
+
+            if (this.backupLocation && typeof this.backupLocation.entries === 'function') {
+                const entries = this.backupLocation.entries();
+
+                for await (const [name, handle] of entries) {
+                    if (handle.kind !== 'directory') continue;
+                    if (this.seenDeviceIds.has(name)) continue;
+                    const alreadyRegistered = this.registeredDevices.find(d => d.id === name);
+                    if (alreadyRegistered) {
+                        this.seenDeviceIds.add(name);
+                        continue;
+                    }
+
+                    foundDevices.push({
+                        id: name,
+                        name: name,
+                        handle: handle,
+                        path: name
+                    });
+                }
             }
 
             if (foundDevices.length > 0) {
@@ -251,25 +242,53 @@ class BackupManager {
 
     async selectBackupLocation() {
         try {
-            const newLocation = await window.showDirectoryPicker({
-                mode: 'readwrite',
-                id: 'backup-location'
-            });
+            const button = document.getElementById('selectBackupLocationBtn');
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Preparing...';
+            }
+
+            let newLocation = null;
+            if (typeof window.showDirectoryPicker === 'function') {
+                newLocation = await window.showDirectoryPicker({
+                    mode: 'readwrite',
+                    id: 'backup-location'
+                });
+            } else if (this.isMobileDevice()) {
+                newLocation = {
+                    kind: 'directory',
+                    name: 'Mobile Storage',
+                    isFallback: true
+                };
+                this.deviceDetectionMode = 'mobile-fallback';
+            } else {
+                throw new Error('Folder selection is not supported in this browser.');
+            }
 
             this.backupLocation = newLocation;
+            this.hasPermission = true;
             this.saveSettings();
 
             this.showNotification(
-                'Location Updated',
-                'Backup location has been changed.',
+                this.deviceDetectionMode === 'mobile-fallback' ? 'Mobile fallback enabled' : 'Location Updated',
+                this.deviceDetectionMode === 'mobile-fallback'
+                    ? 'Using common storage folders for device detection on this mobile device.'
+                    : 'Backup location has been changed.',
                 'success'
             );
 
             this.updateNotice();
             this.closeSettings();
+            await this.checkForNewDevices();
         } catch (error) {
             if (error.name !== 'AbortError') {
                 this.showNotification('Error', 'Could not select backup location.', 'error');
+            }
+        } finally {
+            const button = document.getElementById('selectBackupLocationBtn');
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Select Folder';
             }
         }
     }
@@ -662,6 +681,12 @@ class BackupManager {
 
     updateNotice() {
         const noticeBanner = document.getElementById('noticeBanner');
+        if (this.deviceDetectionMode === 'mobile-fallback') {
+            noticeBanner.textContent = 'Mobile fallback is active. Common storage folders are available for device detection.';
+            noticeBanner.classList.remove('hidden');
+            return;
+        }
+
         if (!this.backupLocation) {
             noticeBanner.textContent = 'Select your backup location in Settings before adding devices.';
             noticeBanner.classList.remove('hidden');
