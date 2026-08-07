@@ -121,15 +121,12 @@ class BackupManager {
         if (!this.isMobileDevice()) return [];
 
         return [
-            { id: 'internal-storage', name: 'Internal Storage', path: 'Internal Storage', handle: { kind: 'directory', name: 'Internal Storage' } },
             { id: 'sd-card', name: 'SD Card', path: 'SD Card', handle: { kind: 'directory', name: 'SD Card' } },
             { id: 'external-storage', name: 'External Storage', path: 'External Storage', handle: { kind: 'directory', name: 'External Storage' } },
             { id: 'micro-sd', name: 'Micro SD', path: 'Micro SD', handle: { kind: 'directory', name: 'Micro SD' } },
             { id: 'storage-extsdcard', name: 'extSdCard', path: 'extSdCard', handle: { kind: 'directory', name: 'extSdCard' } },
             { id: 'storage-sdcard1', name: 'sdcard1', path: 'sdcard1', handle: { kind: 'directory', name: 'sdcard1' } },
-            { id: 'storage-sdcard', name: 'sdcard', path: 'sdcard', handle: { kind: 'directory', name: 'sdcard' } },
-            { id: 'downloads', name: 'Downloads', path: 'Downloads', handle: { kind: 'directory', name: 'Downloads' } },
-            { id: 'dcim', name: 'DCIM', path: 'DCIM', handle: { kind: 'directory', name: 'DCIM' } }
+            { id: 'storage-sdcard', name: 'sdcard', path: 'sdcard', handle: { kind: 'directory', name: 'sdcard' } }
         ];
     }
 
@@ -162,7 +159,11 @@ class BackupManager {
                         this.seenDeviceIds.add(device.id);
                         continue;
                     }
-                    foundDevices.push(device);
+
+                    const shouldPrompt = device.id.includes('sd') || device.id.includes('storage') || device.id.includes('external');
+                    if (shouldPrompt) {
+                        foundDevices.push(device);
+                    }
                 }
             }
 
