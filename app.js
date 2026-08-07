@@ -9,6 +9,7 @@ class BackupManager {
         this.isBackingUp = false;
         this.fileStats = { totalFiles: 0, totalSize: 0 };
         this.seenDeviceIds = new Set();
+        this.pendingDetectedDevices = [];
 
         this.initializeScreen = 'loading';
         this.hasPermission = false;
@@ -104,9 +105,29 @@ class BackupManager {
         return [
             { id: 'internal-storage', name: 'Internal Storage', path: 'Internal Storage', handle: { kind: 'directory', name: 'Internal Storage' } },
             { id: 'sd-card', name: 'SD Card', path: 'SD Card', handle: { kind: 'directory', name: 'SD Card' } },
+            { id: 'external-storage', name: 'External Storage', path: 'External Storage', handle: { kind: 'directory', name: 'External Storage' } },
+            { id: 'micro-sd', name: 'Micro SD', path: 'Micro SD', handle: { kind: 'directory', name: 'Micro SD' } },
+            { id: 'storage-extsdcard', name: 'extSdCard', path: 'extSdCard', handle: { kind: 'directory', name: 'extSdCard' } },
+            { id: 'storage-sdcard1', name: 'sdcard1', path: 'sdcard1', handle: { kind: 'directory', name: 'sdcard1' } },
+            { id: 'storage-sdcard', name: 'sdcard', path: 'sdcard', handle: { kind: 'directory', name: 'sdcard' } },
             { id: 'downloads', name: 'Downloads', path: 'Downloads', handle: { kind: 'directory', name: 'Downloads' } },
             { id: 'dcim', name: 'DCIM', path: 'DCIM', handle: { kind: 'directory', name: 'DCIM' } }
         ];
+    }
+
+    queueDetectedDevices(devices) {
+        const uniqueDevices = devices.filter(device => !this.pendingDetectedDevices.some(p => p.id === device.id));
+        this.pendingDetectedDevices.push(...uniqueDevices);
+    }
+
+    showNextPendingDevice() {
+        if (this.currentDevice) return;
+        if (this.pendingDetectedDevices.length === 0) return;
+
+        const device = this.pendingDetectedDevices.shift();
+        if (!device) return;
+
+        this.onNewDeviceDetected(device);
     }
 
     async checkForNewDevices() {
@@ -149,7 +170,12 @@ class BackupManager {
             }
 
             if (foundDevices.length > 0) {
-                this.onNewDeviceDetected(foundDevices[0]);
+                this.queueDetectedDevices(foundDevices);
+                if (!this.currentDevice) {
+                    this.showNextPendingDevice();
+                }
+            } else if (!this.currentDevice && this.pendingDetectedDevices.length > 0) {
+                this.showNextPendingDevice();
             }
 
         } catch (error) {
@@ -178,6 +204,10 @@ class BackupManager {
         }
         this.closeDialog('device');
         this.currentDevice = null;
+
+        if (this.pendingDetectedDevices.length > 0) {
+            setTimeout(() => this.showNextPendingDevice(), 250);
+        }
     }
 
     selectFolderOption(card) {
@@ -228,6 +258,10 @@ class BackupManager {
 
             this.updateDevicesList();
             this.currentDevice = null;
+
+            if (this.pendingDetectedDevices.length > 0) {
+                setTimeout(() => this.showNextPendingDevice(), 250);
+            }
 
         } catch (error) {
             this.showNotification('Error', error.message, 'error');
