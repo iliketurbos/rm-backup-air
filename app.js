@@ -15,6 +15,7 @@ class BackupManager {
         this.initializeScreen = 'loading';
         this.hasPermission = false;
         this.deviceDetectionMode = 'none';
+        this.mediaFolderMode = false;
         
         this.init();
     }
@@ -117,17 +118,37 @@ class BackupManager {
         return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
     }
 
-    getFallbackDetectedDevices() {
-        if (!this.isMobileDevice()) return [];
-
-        return [
-            { id: 'sd-card', name: 'SD Card', path: 'SD Card', handle: { kind: 'directory', name: 'SD Card' } },
-            { id: 'external-storage', name: 'External Storage', path: 'External Storage', handle: { kind: 'directory', name: 'External Storage' } },
-            { id: 'micro-sd', name: 'Micro SD', path: 'Micro SD', handle: { kind: 'directory', name: 'Micro SD' } },
-            { id: 'storage-extsdcard', name: 'extSdCard', path: 'extSdCard', handle: { kind: 'directory', name: 'extSdCard' } },
-            { id: 'storage-sdcard1', name: 'sdcard1', path: 'sdcard1', handle: { kind: 'directory', name: 'sdcard1' } },
-            { id: 'storage-sdcard', name: 'sdcard', path: 'sdcard', handle: { kind: 'directory', name: 'sdcard' } }
+    looksLikeRemovableMedia(name, handle) {
+        const normalized = name.toLowerCase();
+        const removablePatterns = [
+            /sd/i,
+            /secure digital/i,
+            /micro sd/i,
+            /memory card/i,
+            /usb/i,
+            /flash/i,
+            /thumb/i,
+            /external/i,
+            /removable/i,
+            /portable/i,
+            /drive/i
         ];
+
+        const genericFolderPatterns = /downloads|documents|pictures|music|videos|dcim|internal storage|storage|android|camera|movie|photo/i;
+        const hasRemovableName = removablePatterns.some(pattern => pattern.test(normalized));
+        const isGenericFolder = genericFolderPatterns.test(normalized);
+
+        if (handle && typeof handle === 'object') {
+            const handleName = (handle.name || '').toLowerCase();
+            const handleHasRemovableName = removablePatterns.some(pattern => pattern.test(handleName));
+            const handleIsGenericFolder = genericFolderPatterns.test(handleName);
+            if (handleHasRemovableName && !handleIsGenericFolder) return true;
+        }
+
+        const canAccess = !!(handle && typeof handle === 'object' && typeof handle.getFileHandle === 'function');
+        if (canAccess && hasRemovableName && !isGenericFolder) return true;
+
+        return hasRemovableName && !isGenericFolder;
     }
 
     queueDetectedDevices(devices) {
@@ -149,43 +170,28 @@ class BackupManager {
         try {
             const foundDevices = [];
 
-            if (!this.backupLocation && !this.isMobileDevice()) return;
+            if (!this.backupLocation || typeof this.backupLocation.entries !== 'function') return;
 
-            if (this.deviceDetectionMode === 'mobile-fallback' || !this.backupLocation) {
-                for (const device of this.getFallbackDetectedDevices()) {
-                    if (this.seenDeviceIds.has(device.id)) continue;
-                    const alreadyRegistered = this.registeredDevices.find(d => d.id === device.id);
-                    if (alreadyRegistered) {
-                        this.seenDeviceIds.add(device.id);
-                        continue;
-                    }
+            const entries = this.backupLocation.entries();
 
-                    const shouldPrompt = device.id.includes('sd') || device.id.includes('storage') || device.id.includes('external');
-                    if (shouldPrompt) {
-                        foundDevices.push(device);
-                    }
+            for await (const [name, handle] of entries) {
+                if (handle.kind !== 'directory') continue;
+                if (this.seenDeviceIds.has(name)) continue;
+                const alreadyRegistered = this.registeredDevices.find(d => d.id === name);
+                if (alreadyRegistered) {
+                    this.seenDeviceIds.add(name);
+                    continue;
                 }
-            }
 
-            if (this.backupLocation && typeof this.backupLocation.entries === 'function') {
-                const entries = this.backupLocation.entries();
+                if (!this.looksLikeRemovableMedia(name, handle)) continue;
 
-                for await (const [name, handle] of entries) {
-                    if (handle.kind !== 'directory') continue;
-                    if (this.seenDeviceIds.has(name)) continue;
-                    const alreadyRegistered = this.registeredDevices.find(d => d.id === name);
-                    if (alreadyRegistered) {
-                        this.seenDeviceIds.add(name);
-                        continue;
-                    }
-
-                    foundDevices.push({
-                        id: name,
-                        name: name,
-                        handle: handle,
-                        path: name
-                    });
-                }
+                foundDevices.push({
+                    id: name,
+                    name: name,
+                    handle: handle,
+                    path: name,
+                    manualConfirm: !this.looksLikeRemovableMedia(name, handle) || false
+                });
             }
 
             if (foundDevices.length > 0) {
@@ -307,26 +313,18 @@ class BackupManager {
                     mode: 'readwrite',
                     id: 'backup-location'
                 });
-            } else if (this.isMobileDevice()) {
-                newLocation = {
-                    kind: 'directory',
-                    name: 'Mobile Storage',
-                    isFallback: true
-                };
-                this.deviceDetectionMode = 'mobile-fallback';
             } else {
                 throw new Error('Folder selection is not supported in this browser.');
             }
 
             this.backupLocation = newLocation;
             this.hasPermission = true;
+            this.mediaFolderMode = true;
             this.saveSettings();
 
             this.showNotification(
-                this.deviceDetectionMode === 'mobile-fallback' ? 'Mobile fallback enabled' : 'Location Updated',
-                this.deviceDetectionMode === 'mobile-fallback'
-                    ? 'Using common storage folders for device detection on this mobile device.'
-                    : 'Backup location has been changed.',
+                'Media Folder Selected',
+                'The selected folder will be used as the removable-media source. Only entries inside it will be considered.',
                 'success'
             );
 
@@ -735,14 +733,14 @@ class BackupManager {
 
     updateNotice() {
         const noticeBanner = document.getElementById('noticeBanner');
-        if (this.deviceDetectionMode === 'mobile-fallback') {
-            noticeBanner.textContent = 'Mobile fallback is active. Common storage folders are available for device detection.';
+        if (!this.backupLocation) {
+            noticeBanner.textContent = 'Select the removable-media folder in Settings to scan it directly.';
             noticeBanner.classList.remove('hidden');
             return;
         }
 
-        if (!this.backupLocation) {
-            noticeBanner.textContent = 'Select your backup location in Settings before adding devices.';
+        if (this.mediaFolderMode) {
+            noticeBanner.textContent = 'Scanning the selected removable-media folder for connected media.';
             noticeBanner.classList.remove('hidden');
             return;
         }
