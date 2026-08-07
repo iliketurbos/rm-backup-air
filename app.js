@@ -10,6 +10,7 @@ class BackupManager {
         this.fileStats = { totalFiles: 0, totalSize: 0 };
         this.seenDeviceIds = new Set();
         this.pendingDetectedDevices = [];
+        this.relativeTimeTimer = null;
 
         this.initializeScreen = 'loading';
         this.hasPermission = false;
@@ -33,8 +34,25 @@ class BackupManager {
         // Show dashboard by default and use settings for file access
         this.showScreen('dashboard');
         this.updateNotice();
+        this.startRelativeTimeRefresh();
 
         await this.checkForNewDevices();
+    }
+
+    startRelativeTimeRefresh() {
+        if (this.relativeTimeTimer) return;
+
+        this.relativeTimeTimer = setInterval(() => {
+            this.updateDevicesList();
+            this.updateHistoryDisplay();
+        }, 60000);
+    }
+
+    stopRelativeTimeRefresh() {
+        if (this.relativeTimeTimer) {
+            clearInterval(this.relativeTimeTimer);
+            this.relativeTimeTimer = null;
+        }
     }
 
     setupEventListeners() {
@@ -483,7 +501,7 @@ class BackupManager {
                 <div class="device-item-info">
                     <div class="device-item-name">${device.name}</div>
                     <div class="device-item-path">${device.folderName}</div>
-                    ${device.lastBackup ? `<div class="device-item-path">Last backup: ${this.formatDate(new Date(device.lastBackup))}</div>` : ''}
+                    ${device.lastBackup ? `<div class="device-item-path">Last updated: ${this.formatDate(new Date(device.lastBackup))}</div>` : '<div class="device-item-path">No backup yet</div>'}
                 </div>
                 <button class="btn-icon" onclick="backupApp.removeDevice('${device.id}')" title="Remove device">🗑️</button>
             </div>
@@ -494,7 +512,7 @@ class BackupManager {
                 <div class="device-item-info">
                     <div class="device-item-name">${device.name}</div>
                     <div class="device-item-path">${device.folderName}</div>
-                    ${device.lastBackup ? `<div class="device-item-path">Last backup: ${this.formatDate(new Date(device.lastBackup))}</div>` : ''}
+                    ${device.lastBackup ? `<div class="device-item-path">Last updated: ${this.formatDate(new Date(device.lastBackup))}</div>` : '<div class="device-item-path">No backup yet</div>'}
                 </div>
                 <div class="device-item-actions">
                     <button class="btn-icon device-auto-toggle" onclick="backupApp.toggleDeviceAutoBackup('${device.id}')" title="Toggle auto backup">
@@ -707,7 +725,8 @@ class BackupManager {
         const activeDevice = this.registeredDevices[0];
         deviceName.textContent = activeDevice.name;
         devicePath.textContent = activeDevice.folderName;
-        deviceStatusText.textContent = activeDevice.lastBackup ? `Last backup ${this.formatDate(new Date(activeDevice.lastBackup))}` : 'Ready to backup';
+        const lastBackupLabel = activeDevice.lastBackup ? `Last updated ${this.formatDate(new Date(activeDevice.lastBackup))}` : 'No backup yet';
+        deviceStatusText.textContent = lastBackupLabel;
 
         deviceCard.classList.remove('hidden');
         statusText.textContent = 'Ready to backup';
