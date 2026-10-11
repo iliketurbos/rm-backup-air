@@ -1,6 +1,6 @@
 # RMBA
 Removable Media Backup Air
-A free, open-source app/website for automatic backups from removable media
+Scrapped, doesn't work.
 ## How to use it
 Go to the [website](https://iliketurbos.github.io/rm-backup-air/)
 or
